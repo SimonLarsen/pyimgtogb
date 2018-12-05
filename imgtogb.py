@@ -78,8 +78,8 @@ const unsigned char ${name}_data[] = {
 
 def write_map_c_header(path, tile_data, tile_data_length, tiles, tiles_width, tiles_height, tiles_offset):
     name = os.path.splitext(os.path.basename(path))[0]
-    temp = Template("""#ifndef ${uname}_SPRITES_H
-#define ${uname}_SPRITES_H
+    temp = Template("""#ifndef ${uname}_MAP_H
+#define ${uname}_MAP_H
 
 #define ${name}_data_length $length
 const unsigned char ${name}_data[] = {
@@ -144,8 +144,7 @@ def main():
 
         tile_data = np.zeros(16 * len(tile_map), np.uint16)
         for k,v in tile_map.items():
-            tile_data[v:v+16] = k
-
+            tile_data[(v*16):(v+1)*16] = k
 
         if args.rle:
             tile_data = compress_rle(tile_data)
