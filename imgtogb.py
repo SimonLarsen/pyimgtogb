@@ -130,6 +130,8 @@ def main():
 
     if width % 8 != 0 or width % 8 != 0:
         raise ValueError("Image dimensions not divisible by 8.")
+    if "palette" not in meta:
+        raise ValueError("PNG image is not indexed.")
 
     tiles_x = round(width / 8)
     tiles_y = round(height / 8)
