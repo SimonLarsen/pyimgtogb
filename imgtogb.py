@@ -32,8 +32,7 @@ def convert_tile(data, x, y):
 
 def compress_rle(data):
     value = data[0]
-    run = 1
-    i = 1
+    run, i = 1, 1
     out = []
     while i < len(data):
         if data[i] == data[i-1] and run < RLE_MAX_RUN:
@@ -53,6 +52,7 @@ def compress_rle(data):
 
     return out
 
+
 def write_sprites_c_header(path, tile_data, tile_data_length):
     name = os.path.splitext(os.path.basename(path))[0]
     temp = Template("""#ifndef ${uname}_SPRITES_H
@@ -65,11 +65,13 @@ const unsigned char ${name}_data[] = {
 
 #endif\n""")
 
+    s_td = ",\n    ".join([", ".join(map(lambda x: str(x).rjust(3), tile_data[i:i+16])) for i in range(0, len(tile_data), 16)])
+
     s = temp.substitute(
         uname=name.upper(),
         name=name,
         datalength=tile_data_length,
-        data=", ".join(map(str, tile_data))
+        data=s_td
     )
 
     with open(path, "w") as f:
@@ -95,12 +97,15 @@ const unsigned char ${name}_tiles[] = {
 
 #endif\n""")
 
+    s_td = ",\n    ".join([", ".join(map(lambda x: str(x).rjust(3), tile_data[i:i+16])) for i in range(0, len(tile_data), 16)])
+    s_t = ",\n    ".join([", ".join(map(lambda x: str(x).rjust(3), tiles[i:i+16])) for i in range(0, len(tiles), 16)])
+
     s = temp.substitute(
         uname=name.upper(),
         name=name,
         length=tile_data_length,
-        data=", ".join(map(str, tile_data)),
-        tiles=", ".join(map(str, tiles)),
+        data=s_td,
+        tiles=s_t,
         width=tiles_width,
         height=tiles_height,
         offset=tiles_offset
