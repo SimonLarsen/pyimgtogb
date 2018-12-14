@@ -1,124 +1,86 @@
-import os
 import argparse
 import png
 import numpy as np
 import itertools
-from string import Template
-
-RLE_MAX_RUN = 200
+import export
 
 def convert_tile(data, x, y):
     px, py = x*8, y*8
     td = data[px:px+8, py:py+8]
-    values = np.unique(td)
-    values.sort()
-    pmap = {values[i]: i for i in range(len(values))}
 
     out = []
     for iy in range(8):
         b0, b1 = 0, 0
         for ix in range(8):
-            color = td[ix, iy]
-            v = pmap[color]
-
+            v = td[ix, iy]
+            
             b0 |= (v & 1) << (7 - ix)
             b1 |= ((v & 2) >> 1) << (7 - ix)
 
         out.append(b0)
         out.append(b1)
-
     return tuple(out)
 
+def rgb_to_5bit(r, g, b):
+    r = round(r  / 255 * 31)
+    g = round(g  / 255 * 31)
+    b = round(b  / 255 * 31)
+    val = r + (g << 5) + (b << 10)
+    return val & 255, val >> 8
 
-def compress_rle(data):
-    value = data[0]
-    run, i = 1, 1
-    out = []
-    while i < len(data):
-        if data[i] == data[i-1] and run < RLE_MAX_RUN:
-            run = run + 1
-        else:
-            out.append(data[i-1])
-            if run > 1:
-                out.append(data[i-1])
-                out.append(run)
-            run = 1
-        i = i + 1
+def make_dx_palettes(data, data_dx, colors, tiles_x, tiles_y):
+    palette_map = []
+    palettes = []
 
-    out.append(data[-1])
-    if run > 1:
-        out.append(data[-1])
-        out.append(run)
+    for y in range(tiles_y):
+        for x in range(tiles_x):
+            px, py = x*8, y*8
+            td = data[px:px+8, py:py+8]
+            td_dx = data_dx[px:px+8, py:py+8]
 
-    return out
+            pal = {}
 
+            for ndi, ndv in zip(np.nditer(td), np.nditer(td_dx)):
+                i = ndi.item(0)
+                v = ndv.item(0)
+                if i in pal:
+                    if pal[i] != v:
+                        raise ValueError("Overloaded colors in tile ({},{}).".format(x, y))
+                else:
+                    pal[i] = v
 
-def write_sprites_c_header(path, tile_data, tile_data_length):
-    name = os.path.splitext(os.path.basename(path))[0]
-    temp = Template("""#ifndef ${uname}_SPRITES_H
-#define ${uname}_SPRITES_H
+            index = -1
+            for i in range(len(palette_map)):
+                if all(k not in pal or pal[k] == v for k, v in palette_map[i].items()):
+                    index = i
+                    break
 
-#define ${name}_data_length $datalength
-const unsigned char ${name}_data[] = {
-    ${data}
-};
+            if index == -1:
+                index = len(palette_map)
+                palette_map.append(pal)
 
-#endif\n""")
+            for k,v in pal.items():
+                palette_map[index][k] = v
+            palettes.append(index)
 
-    s_td = ",\n    ".join([", ".join(map(lambda x: str(x).rjust(3), tile_data[i:i+16])) for i in range(0, len(tile_data), 16)])
+    palette_data = []
+    for m in palette_map:
+        for i in range(4):
+            if i in m:
+                palette_data.extend(rgb_to_5bit(*colors[m[i]]))
+            else:
+                palette_data.append(0)
+                palette_data.append(0)
 
-    s = temp.substitute(
-        uname=name.upper(),
-        name=name,
-        datalength=tile_data_length,
-        data=s_td
-    )
-
-    with open(path, "w") as f:
-        f.write(s)
-
-
-def write_map_c_header(path, tile_data, tile_data_length, tiles, tiles_width, tiles_height, tiles_offset):
-    name = os.path.splitext(os.path.basename(path))[0]
-    temp = Template("""#ifndef ${uname}_MAP_H
-#define ${uname}_MAP_H
-
-#define ${name}_data_length $length
-const unsigned char ${name}_data[] = {
-    ${data}
-};
-
-#define ${name}_tiles_width ${width}
-#define ${name}_tiles_height ${height}
-#define ${name}_tiles_offset ${offset}
-const unsigned char ${name}_tiles[] = {
-    ${tiles}
-};
-
-#endif\n""")
-
-    s_td = ",\n    ".join([", ".join(map(lambda x: str(x).rjust(3), tile_data[i:i+16])) for i in range(0, len(tile_data), 16)])
-    s_t = ",\n    ".join([", ".join(map(lambda x: str(x).rjust(3), tiles[i:i+16])) for i in range(0, len(tiles), 16)])
-
-    s = temp.substitute(
-        uname=name.upper(),
-        name=name,
-        length=tile_data_length,
-        data=s_td,
-        tiles=s_t,
-        width=tiles_width,
-        height=tiles_height,
-        offset=tiles_offset
-    )
-
-    with open(path, "w") as f:
-        f.write(s)
+    return palettes, palette_data
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("infile", help="Image file.", type=str)
     parser.add_argument("outfile", help="Output file.", type=str)
+    parser.add_argument("-c", "--color", help="Game Boy Color mode.", action="store_true")
+    parser.add_argument("-d", "--dx", help="Color mode reference. Produces DMG and CGB compatible data for \"DX\"-style games.", type=str)
     parser.add_argument("-m", "--map", help="Produce tile map.", action="store_true")
     parser.add_argument("--8x16", help="Enable 8x16 sprite mode.", action="store_true")
     parser.add_argument("-r", "--rle", help="Compress data using RLE.", action="store_true")
@@ -132,14 +94,30 @@ def main():
         raise ValueError("Image dimensions not divisible by 8.")
     if "palette" not in meta:
         raise ValueError("PNG image is not indexed.")
-
-    tiles_x = round(width / 8)
-    tiles_y = round(height / 8)
+    if not args.color and len(meta["palette"]) > 4:
+        raise ValueError("At most 4 colors are supported in non-color mode.")
 
     data = np.array(list(data_map)).transpose()
 
+    tiles_x = round(width / 8)
+    tiles_y = round(height / 8)
     tile_data = [convert_tile(data, tx, ty) for ty in range(tiles_y) for tx in range(tiles_x)]
     tile_data_length = len(tile_data)
+
+    palettes, palette_data = [], []
+
+    if args.dx:
+        source_dx = png.Reader(args.dx)
+        width_dx, height_dx, data_map_dx, meta_dx = source_dx.read()
+
+        if width_dx != width or height_dx != height:
+            raise ValueError("Dimension of DX reference image does not match input.")
+        if "palette" not in meta_dx:
+            raise ValueError("DX reference PNG image is not indexed.")
+
+        data_dx = np.array(list(data_map_dx)).transpose()
+
+        palettes, palette_data = make_dx_palettes(data, data_dx, meta_dx["palette"], tiles_x, tiles_y)
 
     if args.map:
         tile_map = dict()
@@ -153,22 +131,14 @@ def main():
         for k,v in tile_map.items():
             tile_data[(v*16):(v+1)*16] = k
 
-        if args.rle:
-            tile_data = compress_rle(tile_data)
-            tiles = compress_rle(tiles)
-
         for i in range(len(tiles)):
             tiles[i] = tiles[i] + args.offset
 
-        write_map_c_header(args.outfile, tile_data, len(tile_map), tiles, tiles_x, tiles_y, args.offset)
+        export.write_map_c_header(args.outfile, tile_data, tiles, tiles_x, tiles_y, args.offset, palettes, palette_data, rle=args.rle)
 
     else:
         tile_data = np.fromiter(itertools.chain.from_iterable(tile_data), np.uint16)
-
-        if args.rle:
-            tile_data = compress_rle(tile_data)
-
-        write_sprites_c_header(args.outfile, tile_data, tile_data_length)
+        export.write_sprites_c_header(args.outfile, tile_data, palettes, palette_data, rle=args.rle)
 
 if __name__ == "__main__":
     main()
