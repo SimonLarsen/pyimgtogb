@@ -25,8 +25,7 @@ def rgb_to_5bit(r, g, b):
     r = round(r  / 255 * 31)
     g = round(g  / 255 * 31)
     b = round(b  / 255 * 31)
-    val = r + (g << 5) + (b << 10)
-    return val & 255, val >> 8
+    return r + (g << 5) + (b << 10)
 
 def make_dx_palettes(data, data_dx, colors, tiles_x, tiles_y):
     palette_map = []
@@ -67,9 +66,8 @@ def make_dx_palettes(data, data_dx, colors, tiles_x, tiles_y):
     for m in palette_map:
         for i in range(4):
             if i in m:
-                palette_data.extend(rgb_to_5bit(*colors[m[i]]))
+                palette_data.append(rgb_to_5bit(*colors[m[i]]))
             else:
-                palette_data.append(0)
                 palette_data.append(0)
 
     return palettes, palette_data
@@ -85,6 +83,7 @@ def main():
     parser.add_argument("--8x16", help="Enable 8x16 sprite mode.", action="store_true")
     parser.add_argument("-r", "--rle", help="Compress data using RLE.", action="store_true")
     parser.add_argument("-O", "--offset", help="Tile map offset.", type=int, default=0)
+    parser.add_argument("-P", "--palette_offset", help="Palette index offset.", type=int, default=0)
     args = parser.parse_args()
 
     source = png.Reader(args.infile)
@@ -119,6 +118,8 @@ def main():
 
         palettes, palette_data = make_dx_palettes(data, data_dx, meta_dx["palette"], tiles_x, tiles_y)
 
+    palettes = [i + args.offset for i in palettes]
+
     if args.map:
         tile_map = dict()
         tiles = []
@@ -131,8 +132,7 @@ def main():
         for k,v in tile_map.items():
             tile_data[(v*16):(v+1)*16] = k
 
-        for i in range(len(tiles)):
-            tiles[i] = tiles[i] + args.offset
+        tiles = [i + args.offset for i in tiles]
 
         export.write_map_c_header(args.outfile, tile_data, tiles, tiles_x, tiles_y, args.offset, palettes, palette_data, rle=args.rle)
 

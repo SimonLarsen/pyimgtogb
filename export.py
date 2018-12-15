@@ -18,8 +18,8 @@ const unsigned char ${name}_data[] = {
 ${palette_data}
 #endif\n""")
 
-    tile_data_length = len(tile_data)
-    palette_data_length = int(len(palette_data) / 8)
+    tile_data_length = int(len(tile_data) / 16)
+    palette_data_length = int(len(palette_data) / 4)
 
     if rle:
         tile_data = rle_compress(tile_data)
@@ -32,7 +32,7 @@ const unsigned char ${name}_palettes[] = {
     ${palettes}
 };
 #define ${name}_palette_data_length ${pdlen}
-const unsigned char ${name}_palette_data[] = {
+const unsigned int ${name}_palette_data[] = {
     ${palette_data}
 };""").substitute(name=name, pdlen=palette_data_length, palettes=pretty_data(palettes), palette_data=pretty_data(palette_data))
 
@@ -65,8 +65,8 @@ const unsigned char ${name}_tiles[] = {
 ${palette_data}
 #endif\n""")
 
-    tile_data_length = len(tile_data)
-    palette_data_length = int(len(palette_data) / 8)
+    tile_data_length = int(len(tile_data) / 16)
+    palette_data_length = int(len(palette_data) / 4)
 
     if rle:
         tile_data = rle_compress(tile_data)
@@ -80,7 +80,7 @@ const unsigned char ${name}_palettes[] = {
     ${palettes}
 };
 #define ${name}_palette_data_length ${pdlen}
-const unsigned char ${name}_palette_data[] = {
+const unsigned int ${name}_palette_data[] = {
     ${palette_data}
 };""").substitute(
         name=name,
