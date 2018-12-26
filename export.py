@@ -7,7 +7,7 @@ def pretty_data(data):
     return ",\n    ".join([", ".join(map(lambda x: str(x).rjust(3), data[i:i+16])) for i in range(0, len(data), 16)])
 
 
-def write_sprites_c_header(path, tile_data, palettes=[], palette_data=[], rle=False):
+def write_sprites_c_header(path, tile_data, palettes=None, palette_data=None, rle=False):
     name = os.path.splitext(os.path.basename(path))[0]
     temp = Template("""#ifndef ${uname}_SPRITES_H
 #define ${uname}_SPRITES_H
@@ -18,15 +18,20 @@ const unsigned char ${name}_data[] = {
 ${palette_data}
 #endif\n""")
 
+    has_palettes = palettes != None
+
     tile_data_length = int(len(tile_data) / 16)
-    palette_data_length = int(len(palette_data) / 4)
+    palette_data_length = 0
+    if has_palettes:
+        palette_data_length = int(len(palette_data) / 4)
 
     if rle:
         tile_data = rle_compress(tile_data)
-        palettes = rle_compress(palettes)
+        if has_palettes:
+            palettes = rle_compress(palettes)
 
     s_pal = ""
-    if len(palettes) > 0:
+    if has_palettes:
         s_pal = Template("""
 const unsigned char ${name}_palettes[] = {
     ${palettes}
@@ -48,7 +53,7 @@ const unsigned int ${name}_palette_data[] = {
         f.write(s)
 
 
-def write_map_c_header(path, tile_data, tiles, tiles_width, tiles_height, tiles_offset, palettes=[], palette_data=[], rle=False):
+def write_map_c_header(path, tile_data, tiles, tiles_width, tiles_height, tiles_offset, palettes=None, palette_data=None, rle=False):
     name = os.path.splitext(os.path.basename(path))[0]
     temp = Template("""#ifndef ${uname}_MAP_H
 #define ${uname}_MAP_H
@@ -65,16 +70,21 @@ const unsigned char ${name}_tiles[] = {
 ${palette_data}
 #endif\n""")
 
+    has_palettes = palettes != None
+
     tile_data_length = int(len(tile_data) / 16)
-    palette_data_length = int(len(palette_data) / 4)
+    palette_data_length = 0
+    if has_palettes:
+        palette_data_length = int(len(palette_data) / 4)
 
     if rle:
         tile_data = rle_compress(tile_data)
         tiles = rle_compress(tiles)
-        palettes = rle_compress(palettes)
+        if has_palettes:
+            palettes = rle_compress(palettes)
 
     s_pal = ""
-    if len(palettes) > 0:
+    if has_palettes:
         s_pal = Template("""
 const unsigned char ${name}_palettes[] = {
     ${palettes}

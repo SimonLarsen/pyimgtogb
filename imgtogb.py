@@ -13,7 +13,7 @@ def convert_tile(data, x, y):
         b0, b1 = 0, 0
         for ix in range(8):
             v = td[ix, iy]
-            
+
             b0 |= (v & 1) << (7 - ix)
             b1 |= ((v & 2) >> 1) << (7 - ix)
 
@@ -21,11 +21,66 @@ def convert_tile(data, x, y):
         out.append(b1)
     return tuple(out)
 
+
+def convert_tile_color(data, palette, x, y):
+    m = {}
+    for i in range(len(palette)):
+        m[palette[i]] = i
+
+    px, py = x*8, y*8
+    td = data[px:px+8, py:py+8]
+
+    out = []
+    for iy in range(8):
+        b0, b1 = 0, 0
+        for ix in range(8):
+            v = m[td[ix, iy]]
+
+            b0 |= (v & 1) << (7 - ix)
+            b1 |= ((v & 2) >> 1) << (7 - ix)
+
+        out.append(b0)
+        out.append(b1)
+    return tuple(out)
+
+
+def make_color_palettes(data, colors, tiles_x, tiles_y):
+    palette_map = []
+    palettes = []
+    for y in range(tiles_y):
+        for x in range(tiles_x):
+            px, py = x*8, y*8
+            td = data[px:px+8, py:py+8]
+            values = np.unique(td)
+            if len(values) > 4:
+                raise ValueError("Tile ({},{}) contains more than 4 different colors.".format(tiles_x, tiles_y))
+
+            index = -1
+            for i in range(len(palette_map)):
+                noverlap = sum(v in palette_map[i] for v in values)
+                if len(palette_map[i]) + len(values) - noverlap <= 4:
+                    index = i
+                    break
+
+            if index == -1:
+                index = len(palette_map)
+                palette_map.append([])
+
+            for v in values:
+                if v not in palette_map[index]:
+                    palette_map[index].append(v)
+
+            palettes.append(index)
+
+    return palettes, palette_map
+
+
 def rgb_to_5bit(r, g, b):
     r = round(r  / 255 * 31)
     g = round(g  / 255 * 31)
     b = round(b  / 255 * 31)
     return r + (g << 5) + (b << 10)
+
 
 def make_dx_palettes(data, data_dx, colors, tiles_x, tiles_y):
     palette_map = []
@@ -100,25 +155,40 @@ def main():
 
     tiles_x = round(width / 8)
     tiles_y = round(height / 8)
-    tile_data = [convert_tile(data, tx, ty) for ty in range(tiles_y) for tx in range(tiles_x)]
-    tile_data_length = len(tile_data)
 
-    palettes, palette_data = [], []
+    palettes, palette_data = None, None
 
-    if args.dx:
-        source_dx = png.Reader(args.dx)
-        width_dx, height_dx, data_map_dx, meta_dx = source_dx.read()
+    if args.color:
+        palettes, palette_map = make_color_palettes(data, meta["palette"], tiles_x, tiles_y)
+        tile_data = [convert_tile_color(data, palette_map[palettes[tx+ty*tiles_x]], tx, ty) for ty in range(tiles_y) for tx in range(tiles_x)]
+        tile_data_length = len(tile_data)
+        palette_data = []
+        for m in palette_map:
+            for i in range(4):
+                if i < len(m):
+                    palette_data.append(rgb_to_5bit(*meta["palette"][m[i]]))
+                else:
+                    palette_data.append(0)
 
-        if width_dx != width or height_dx != height:
-            raise ValueError("Dimension of DX reference image does not match input.")
-        if "palette" not in meta_dx:
-            raise ValueError("DX reference PNG image is not indexed.")
+    else:
+        tile_data = [convert_tile(data, tx, ty) for ty in range(tiles_y) for tx in range(tiles_x)]
+        tile_data_length = len(tile_data)
 
-        data_dx = np.array(list(data_map_dx)).transpose()
+        if args.dx:
+            source_dx = png.Reader(args.dx)
+            width_dx, height_dx, data_map_dx, meta_dx = source_dx.read()
 
-        palettes, palette_data = make_dx_palettes(data, data_dx, meta_dx["palette"], tiles_x, tiles_y)
+            if width_dx != width or height_dx != height:
+                raise ValueError("Dimension of DX reference image does not match input.")
+            if "palette" not in meta_dx:
+                raise ValueError("DX reference PNG image is not indexed.")
 
-    palettes = [i + args.offset for i in palettes]
+            data_dx = np.array(list(data_map_dx)).transpose()
+
+            palettes, palette_data = make_dx_palettes(data, data_dx, meta_dx["palette"], tiles_x, tiles_y)
+
+    if palettes != None:
+        palettes = [i + args.offset for i in palettes]
 
     if args.map:
         tile_map = dict()
