@@ -113,3 +113,42 @@ const unsigned int ${name}_palette_data[] = {
 
     with open(path, "w") as f:
         f.write(s)
+
+
+def write_border_c_header(path, tiles_width, tiles_height, tile_data, tiles, palettes, palette_data):
+    name = os.path.splitext(os.path.basename(path))[0]
+    temp = Template("""#ifndef ${uname}_BORDER_H
+#define ${uname}_BORDER_H
+#define ${name}_data_length $datalength
+const unsigned char ${name}_data[] = {
+    ${data}
+};
+#define ${name}_tiles_width ${width}
+#define ${name}_tiles_height ${height}
+const unsigned char ${name}_tiles[] = {
+    ${tiles}
+};
+const unsigned char ${name}_palettes[] = {
+    ${palettes}
+};
+#define ${name}_num_palettes $palettecount
+const unsigned char ${name}_palette_data[] = {
+    ${palettedata}
+};
+#endif\n""")
+
+    s = temp.substitute(
+        uname=name.upper(),
+        name=name,
+        datalength=len(tile_data) // 32,
+        data=pretty_data(tile_data),
+        width=tiles_width,
+        height=tiles_height,
+        tiles=pretty_data(tiles),
+        palettes=pretty_data(palettes),
+        palettecount=len(palette_data) // 32,
+        palettedata=pretty_data(palette_data)
+    )
+
+    with open(path, "w") as f:
+        f.write(s)

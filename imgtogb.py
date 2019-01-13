@@ -3,6 +3,8 @@ import png
 import numpy as np
 import itertools
 import export
+from string import Template
+
 
 def convert_tile(data, x, y):
     px, py = x*8, y*8
@@ -20,7 +22,6 @@ def convert_tile(data, x, y):
         out.append(b0)
         out.append(b1)
     return tuple(out)
-
 
 def convert_tile_color(data, palette, x, y):
     m = {}
@@ -53,7 +54,7 @@ def make_color_palettes(data, colors, tiles_x, tiles_y):
             td = data[px:px+8, py:py+8]
             values = np.unique(td)
             if len(values) > 4:
-                raise ValueError("Tile ({},{}) contains more than 4 different colors.".format(tiles_x, tiles_y))
+                raise ValueError("Tile ({},{}) contains more than 4 different colors.".format(x, y))
 
             index = -1
             for i in range(len(palette_map)):
@@ -144,7 +145,7 @@ def main():
     source = png.Reader(args.infile)
     width, height, data_map, meta = source.read()
 
-    if width % 8 != 0 or width % 8 != 0:
+    if width % 8 != 0 or height % 8 != 0:
         raise ValueError("Image dimensions not divisible by 8.")
     if "palette" not in meta:
         raise ValueError("PNG image is not indexed.")
@@ -153,8 +154,8 @@ def main():
 
     data = np.array(list(data_map)).transpose()
 
-    tiles_x = round(width / 8)
-    tiles_y = round(height / 8)
+    tiles_x = width // 8
+    tiles_y = height // 8
 
     palettes, palette_data = None, None
 
@@ -198,7 +199,7 @@ def main():
                 tile_map[tile] = len(tile_map)
             tiles.append(tile_map[tile])
 
-        tile_data = np.zeros(16 * len(tile_map), np.uint16)
+        tile_data = np.zeros(16 * len(tile_map), np.uint8)
         for k,v in tile_map.items():
             tile_data[(v*16):(v+1)*16] = k
 
@@ -207,7 +208,7 @@ def main():
         export.write_map_c_header(args.outfile, tile_data, tiles, tiles_x, tiles_y, args.offset, palettes, palette_data, rle=args.rle)
 
     else:
-        tile_data = np.fromiter(itertools.chain.from_iterable(tile_data), np.uint16)
+        tile_data = np.fromiter(itertools.chain.from_iterable(tile_data), np.uint8)
         export.write_sprites_c_header(args.outfile, tile_data, palettes, palette_data, rle=args.rle)
 
 if __name__ == "__main__":
