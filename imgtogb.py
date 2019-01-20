@@ -133,6 +133,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("infile", help="Image file.", type=str)
     parser.add_argument("outfile", help="Output file.", type=str)
+    parser.add_argument("-C", "--cfile", help="Write data to C source file instead of in header.", type=str)
     parser.add_argument("-c", "--color", help="Game Boy Color mode.", action="store_true")
     parser.add_argument("-d", "--dx", help="Color mode reference. Produces DMG and CGB compatible data for \"DX\"-style games.", type=str)
     parser.add_argument("-m", "--map", help="Produce tile map.", action="store_true")
@@ -205,11 +206,17 @@ def main():
 
         tiles = [i + args.offset for i in tiles]
 
-        export.write_map_c_header(args.outfile, tile_data, tiles, tiles_x, tiles_y, args.offset, palettes, palette_data, rle=args.rle)
+        if args.cfile:
+            export.write_map_c_source(args.cfile, args.outfile, tile_data, tiles, tiles_x, tiles_y, args.offset, palettes, palette_data, rle=args.rle)
+        else:
+            export.write_map_c_header(args.outfile, tile_data, tiles, tiles_x, tiles_y, args.offset, palettes, palette_data, rle=args.rle)
 
     else:
         tile_data = np.fromiter(itertools.chain.from_iterable(tile_data), np.uint8)
-        export.write_sprites_c_header(args.outfile, tile_data, palettes, palette_data, rle=args.rle)
+        if args.cfile:
+            export.write_sprites_c_source(args.cfile, args.outfile, tile_data, palettes, palette_data, rle=args.rle)
+        else:
+            export.write_sprites_c_header(args.outfile, tile_data, palettes, palette_data, rle=args.rle)
 
 if __name__ == "__main__":
     main()
