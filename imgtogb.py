@@ -23,6 +23,7 @@ def convert_tile(data, x, y):
         out.append(b1)
     return tuple(out)
 
+
 def convert_tile_color(data, palette, x, y):
     m = {}
     for i in range(len(palette)):
@@ -137,7 +138,7 @@ def main():
     parser.add_argument("-c", "--color", help="Game Boy Color mode.", action="store_true")
     parser.add_argument("-d", "--dx", help="Color mode reference. Produces DMG and CGB compatible data for \"DX\"-style games.", type=str)
     parser.add_argument("-m", "--map", help="Produce tile map.", action="store_true")
-    parser.add_argument("--8x16", help="Enable 8x16 sprite mode.", action="store_true")
+    parser.add_argument("--s8x16", help="Enable 8x16 sprite mode.", action="store_true")
     parser.add_argument("-r", "--rle", help="Compress data using RLE.", action="store_true")
     parser.add_argument("-O", "--offset", help="Tile map offset.", type=int, default=0)
     parser.add_argument("-P", "--palette_offset", help="Palette index offset.", type=int, default=0)
@@ -160,9 +161,14 @@ def main():
 
     palettes, palette_data = None, None
 
+    if args.s8x16:
+        tileorder = [(x // 2, y + x % 2) for y in range(0, tiles_y, 2) for x in range(tiles_x*2)]
+    else:
+        tileorder = [(x, y) for y in range(tiles_y) for x in range(tiles_x)]
+
     if args.color:
         palettes, palette_map = make_color_palettes(data, meta["palette"], tiles_x, tiles_y)
-        tile_data = [convert_tile_color(data, palette_map[palettes[tx+ty*tiles_x]], tx, ty) for ty in range(tiles_y) for tx in range(tiles_x)]
+        tile_data = [convert_tile_color(data, palette_map[palettes[t[0]+t[1]*tiles_x]], t[0], t[1]) for t in tileorder]
         tile_data_length = len(tile_data)
         palette_data = []
         for m in palette_map:
@@ -173,7 +179,7 @@ def main():
                     palette_data.append(0)
 
     else:
-        tile_data = [convert_tile(data, tx, ty) for ty in range(tiles_y) for tx in range(tiles_x)]
+        tile_data = [convert_tile(data, t[0], t[1]) for t in tileorder]
         tile_data_length = len(tile_data)
 
         if args.dx:
