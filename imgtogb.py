@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import argparse
 import png
 import numpy as np
@@ -196,7 +197,7 @@ def main():
             palettes, palette_data = make_dx_palettes(data, data_dx, meta_dx["palette"], tiles_x, tiles_y)
 
     if palettes != None:
-        palettes = [i + args.offset for i in palettes]
+        palettes = [i + args.palette_offset for i in palettes]
 
     if args.map:
         tile_map = dict()
@@ -213,9 +214,9 @@ def main():
         tiles = [i + args.offset for i in tiles]
 
         if args.cfile:
-            export.write_map_c_source(args.cfile, args.outfile, tile_data, tiles, tiles_x, tiles_y, args.offset, palettes, palette_data, rle=args.rle)
+            export.write_map_c_source(args.cfile, args.outfile, tile_data, tiles, tiles_x, tiles_y, args.offset, palettes, palette_data, args.palette_offset, rle=args.rle)
         else:
-            export.write_map_c_header(args.outfile, tile_data, tiles, tiles_x, tiles_y, args.offset, palettes, palette_data, rle=args.rle)
+            export.write_map_c_header(args.outfile, tile_data, tiles, tiles_x, tiles_y, args.offset, palettes, palette_data, args.palette_offset, rle=args.rle)
 
     else:
         tile_data = np.fromiter(itertools.chain.from_iterable(tile_data), np.uint8)

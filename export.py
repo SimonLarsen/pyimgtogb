@@ -3,8 +3,8 @@ from string import Template
 from rle import compress as rle_compress
 
 
-def pretty_data(data):
-    return ",\n    ".join([", ".join(map(lambda x: str(x).rjust(3), data[i:i+16])) for i in range(0, len(data), 16)])
+def pretty_data(data, w=16):
+    return ",\n    ".join([", ".join(map(lambda x: str(x).rjust(3), data[i:i+w])) for i in range(0, len(data), w)])
 
 
 def write_sprites_c_header(path, tile_data, palettes=None, palette_data=None, rle=False):
@@ -30,7 +30,7 @@ def write_sprites_c_header(path, tile_data, palettes=None, palette_data=None, rl
 #define ${name}_palette_data_length ${pdlen}
 const unsigned int ${name}_palette_data[] = {
     ${palette_data}
-};""").substitute(name=name, pdlen=palette_data_length, palettes=pretty_data(palettes), palette_data=pretty_data(palette_data))
+};""").substitute(name=name, pdlen=palette_data_length, palettes=pretty_data(palettes), palette_data=pretty_data(palette_data, 4))
 
     s = Template("""#ifndef ${uname}_SPRITES_H
 #define ${uname}_SPRITES_H
@@ -73,18 +73,19 @@ def write_sprites_c_source(cpath, hpath, tile_data, palettes=None, palette_data=
 };
 const unsigned int ${name}_palette_data[] = {
     ${palette_data}
-};""").substitute(name=name, palettes=pretty_data(palettes), palette_data=pretty_data(palette_data))
+};""").substitute(name=name, palettes=pretty_data(palettes), palette_data=pretty_data(palette_data, 4))
 
         palette_h = Template("""#define ${name}_palette_data_length ${pdlen}
 extern const unsigned char ${name}_palettes[];
 extern const unsigned int ${name}_palette_data[];""").substitute(name=name, pdlen=palette_data_length)
 
-    cdata = Template("""const unsigned char ${name}_data[] = {
+    cdata = Template("""#include "${hpath}"
+const unsigned char ${name}_data[] = {
     ${data}
 };
-${palette_c}
-""").substitute(
+${palette_c}""").substitute(
         name=name,
+        hpath=hpath,
         data=pretty_data(tile_data),
         palette_c=palette_c
    )
@@ -108,7 +109,7 @@ ${palette_h}
         f.write(hdata)
 
 
-def write_map_c_header(path, tile_data, tiles, tiles_width, tiles_height, tiles_offset, palettes=None, palette_data=None, rle=False):
+def write_map_c_header(path, tile_data, tiles, tiles_width, tiles_height, tiles_offset, palettes=None, palette_data=None, palette_offset=None, rle=False):
     name = os.path.splitext(os.path.basename(path))[0]
     has_palettes = palettes != None
 
@@ -129,13 +130,15 @@ def write_map_c_header(path, tile_data, tiles, tiles_width, tiles_height, tiles_
     ${palettes}
 };
 #define ${name}_palette_data_length ${pdlen}
+#define ${name}_palette_offset ${paloffset}
 const unsigned int ${name}_palette_data[] = {
     ${palette_data}
 };""").substitute(
         name=name,
         pdlen=palette_data_length,
         palettes=pretty_data(palettes),
-        palette_data=pretty_data(palette_data)
+        palette_data=pretty_data(palette_data, 4),
+        paloffset=palette_offset
     )
 
     s = Template("""#ifndef ${uname}_MAP_H
@@ -167,7 +170,7 @@ ${palette_data}
         f.write(s)
 
 
-def write_map_c_source(cpath, hpath, tile_data, tiles, tiles_width, tiles_height, tiles_offset, palettes=None, palette_data=None, rle=False):
+def write_map_c_source(cpath, hpath, tile_data, tiles, tiles_width, tiles_height, tiles_offset, palettes=None, palette_data=None, palette_offset=None, rle=False):
     name = os.path.splitext(os.path.basename(hpath))[0]
 
     has_palettes = palettes != None
@@ -194,25 +197,28 @@ const unsigned int ${name}_palette_data[] = {
 };""").substitute(
         name=name,
         palettes=pretty_data(palettes),
-        palette_data=pretty_data(palette_data)
+        palette_data=pretty_data(palette_data, 4)
     )
 
         palette_h = Template("""#define ${name}_palette_data_length ${pdlen}
+#define ${name}_palette_offset ${paloffset}
 extern const unsigned char ${name}_palettes[];
 extern const unsigned int ${name}_palette_data[];""").substitute(
         name=name,
         pdlen=palette_data_length,
+        paloffset=palette_offset
     )
 
-    cdata = Template("""const unsigned char ${name}_data[] = {
+    cdata = Template("""#include "${hpath}"
+const unsigned char ${name}_data[] = {
     ${data}
 };
 const unsigned char ${name}_tiles[] = {
     ${tiles}
 };
-${palette_c}
-#endif\n""").substitute(
+${palette_c}\n""").substitute(
         name=name,
+        hpath=hpath,
         data=pretty_data(tile_data),
         tiles=pretty_data(tiles),
         palette_c=palette_c
