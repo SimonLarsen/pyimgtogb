@@ -47,8 +47,7 @@ def convert_tile_color(data, palette, x, y):
     return tuple(out)
 
 
-def make_color_palettes(data, colors, tiles_x, tiles_y):
-    palette_map = []
+def make_color_palettes(data, colors, palette_map, tiles_x, tiles_y):
     palettes = []
     for y in range(tiles_y):
         for x in range(tiles_x):
@@ -77,6 +76,34 @@ def make_color_palettes(data, colors, tiles_x, tiles_y):
 
     return palettes, palette_map
 
+
+def read_palette_image(path, colors):
+    source = png.Reader(path)
+    width, height, data_map, meta = source.read()
+    palette_map = []
+
+    if width != 4:
+        raise ValueError("Palette image must be 4 pixels wide.")
+    if "palette" not in meta:
+        raise ValueError("Palette image must be indexed.")
+
+    data = np.array(list(data_map)).transpose()
+
+    # remap colors
+    color_map = {}
+    for i in range(len(meta["palette"])):
+        c = meta["palette"][i]
+        if c in colors:
+            color_map[i] = colors.index(c)
+        else:
+            color_map[i] = len(colors)
+            colors.append(c)
+
+    for iy in range(height):
+        x = list(color_map[i] for i in data[:,iy])
+        palette_map.append(x)
+
+    return colors, palette_map
 
 def rgb_to_5bit(r, g, b):
     r = round(r  / 255 * 31)
@@ -143,6 +170,7 @@ def main():
     parser.add_argument("-r", "--rle", help="Compress data using RLE.", action="store_true")
     parser.add_argument("-O", "--offset", help="Tile map offset.", type=int, default=0)
     parser.add_argument("-P", "--palette_offset", help="Palette index offset.", type=int, default=0)
+    parser.add_argument("-I", "--include_palette", help="Force inclusion of palettes from image.", type=str)
     args = parser.parse_args()
 
     source = png.Reader(args.infile)
@@ -156,6 +184,7 @@ def main():
         raise ValueError("At most 4 colors are supported in non-color mode.")
 
     data = np.array(list(data_map)).transpose()
+    colors = meta["palette"]
 
     tiles_x = width // 8
     tiles_y = height // 8
@@ -168,14 +197,18 @@ def main():
         tileorder = [(x, y) for y in range(tiles_y) for x in range(tiles_x)]
 
     if args.color:
-        palettes, palette_map = make_color_palettes(data, meta["palette"], tiles_x, tiles_y)
+        palette_map = []
+        if args.include_palette:
+            colors, palette_map = read_palette_image(args.include_palette, colors)
+
+        palettes, palette_map = make_color_palettes(data, colors, palette_map, tiles_x, tiles_y)
         tile_data = [convert_tile_color(data, palette_map[palettes[t[0]+t[1]*tiles_x]], t[0], t[1]) for t in tileorder]
         tile_data_length = len(tile_data)
         palette_data = []
         for m in palette_map:
             for i in range(4):
                 if i < len(m):
-                    palette_data.append(rgb_to_5bit(*meta["palette"][m[i]]))
+                    palette_data.append(rgb_to_5bit(*colors[m[i]]))
                 else:
                     palette_data.append(0)
 
