@@ -109,7 +109,7 @@ ${palette_h}
         f.write(hdata)
 
 
-def write_map_c_header(path, tile_data, tiles, tiles_width, tiles_height, tiles_offset, palettes=None, palette_data=None, palette_offset=None, rle=False):
+def write_map_c_header(path, tile_data, tiles, tiles_width, tiles_height, tiles_offset, palettes=None, palette_data=None, palette_offset=None, rle_data=False, rle_tiles=False):
     name = os.path.splitext(os.path.basename(path))[0]
     has_palettes = palettes != None
 
@@ -118,8 +118,9 @@ def write_map_c_header(path, tile_data, tiles, tiles_width, tiles_height, tiles_
     if has_palettes:
         palette_data_length = int(len(palette_data) / 4)
 
-    if rle:
+    if rle_data:
         tile_data = rle_compress(tile_data)
+    if rle_tiles:
         tiles = rle_compress(tiles)
         if has_palettes:
             palettes = rle_compress(palettes)
@@ -170,7 +171,7 @@ ${palette_data}
         f.write(s)
 
 
-def write_map_c_source(cpath, hpath, tile_data, tiles, tiles_width, tiles_height, tiles_offset, palettes=None, palette_data=None, palette_offset=None, rle=False):
+def write_map_c_source(cpath, hpath, tile_data, tiles, tiles_width, tiles_height, tiles_offset, palettes=None, palette_data=None, palette_offset=None, rle_data=False, rle_tiles=False):
     name = os.path.splitext(os.path.basename(hpath))[0]
 
     has_palettes = palettes != None
@@ -180,8 +181,9 @@ def write_map_c_source(cpath, hpath, tile_data, tiles, tiles_width, tiles_height
     if has_palettes:
         palette_data_length = int(len(palette_data) / 4)
 
-    if rle:
+    if rle_data:
         tile_data = rle_compress(tile_data)
+    if rle_tiles:
         tiles = rle_compress(tiles)
         if has_palettes:
             palettes = rle_compress(palettes)
@@ -250,16 +252,23 @@ ${palette_h}
         f.write(hdata)
 
 
-def write_border_c_header(path, tiles_width, tiles_height, tile_data, tiles, palettes, palette_data):
+def write_border_c_header(path, tile_data, tiles, palettes, palette_data, rle=False):
     name = os.path.splitext(os.path.basename(path))[0]
+
+    tile_data_length = len(tile_data) // 32
+    palette_count = len(palette_data) // 16
+
+    if rle:
+        tile_data = rle_compress(tile_data)
+        tiles = rle_compress(tiles)
+        palettes = rle_compress(palettes)
+
     s = Template("""#ifndef ${uname}_BORDER_H
 #define ${uname}_BORDER_H
 #define ${name}_data_length $datalength
 const unsigned char ${name}_data[] = {
     ${data}
 };
-#define ${name}_tiles_width ${width}
-#define ${name}_tiles_height ${height}
 const unsigned char ${name}_tiles[] = {
     ${tiles}
 };
@@ -267,19 +276,17 @@ const unsigned char ${name}_palettes[] = {
     ${palettes}
 };
 #define ${name}_num_palettes $palettecount
-const unsigned char ${name}_palette_data[] = {
+const unsigned int ${name}_palette_data[] = {
     ${palettedata}
 };
 #endif\n""").substitute(
         uname=name.upper(),
         name=name,
-        datalength=len(tile_data) // 32,
+        datalength=tile_data_length,
         data=pretty_data(tile_data),
-        width=tiles_width,
-        height=tiles_height,
         tiles=pretty_data(tiles),
         palettes=pretty_data(palettes),
-        palettecount=len(palette_data) // 32,
+        palettecount=palette_count,
         palettedata=pretty_data(palette_data)
     )
 

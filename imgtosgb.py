@@ -15,13 +15,27 @@ def convert_tile(data, palette, x, y):
 
     out = []
     for iy in range(8):
-        for ix in range(0, 8, 4):
-            b0 = m[td[ix, iy]]
-            b1 = m[td[ix+1, iy]]
-            b2 = m[td[ix+1, iy]]
-            b3 = m[td[ix+1, iy]]
-            out.append(b0 + (b1 << 4))
-            out.append(b2 + (b3 << 4))
+        b0, b1 = 0, 0
+        for ix in range(0, 8):
+            v = m[td[ix, iy]] & 3
+
+            b0 |= (v & 1) << (7 - ix)
+            b1 |= ((v & 2) >> 1) << (7 - ix)
+
+        out.append(b0)
+        out.append(b1)
+
+    for iy in range(8):
+        b0, b1 = 0, 0
+        for ix in range(0, 8):
+            v = m[td[ix, iy]] >> 2
+
+            b0 |= (v & 1) << (7 - ix)
+            b1 |= ((v & 2) >> 1) << (7 - ix)
+
+        out.append(b0)
+        out.append(b1)
+
     return tuple(out)
 
 
@@ -30,16 +44,11 @@ def palette_to_15bit(r, g, b, a):
     gi = round(g / 255 * 31)
     bi = round(b / 255 * 31)
     
-    b0 = (ri + (gi << 5)) & 255
-    b1 = (gi >> 5) + (bi << 2)
-    return b0, b1
+    return (bi << 10) + (gi << 5) + ri
 
 
 def consolidate_transparent(data, width, height, colors):
     trans = [i for i in range(len(colors)) if colors[i][3] < 255]
-
-    if len(trans) == 0:
-        colors.append((0, 0, 0, 0))
 
     for i in range(1, len(trans)):
         data[data == i] = trans[0]
@@ -88,6 +97,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("infile", help="Image file.", type=str)
     parser.add_argument("outfile", help="Output file.", type=str)
+    parser.add_argument("-r","--rle", help="Compress data and tile map using RLE.", action="store_true")
     args = parser.parse_args()
 
     source = png.Reader(args.infile)
@@ -112,7 +122,7 @@ def main():
     for m in palette_map:
         for i in range(16):
             if i < len(m):
-                palette_data.extend(palette_to_15bit(*colors[m[i]]))
+                palette_data.append(palette_to_15bit(*colors[m[i]]))
             else:
                 palette_data.append(palette_to_15bit(0, 0, 0, 0))
     
@@ -127,7 +137,7 @@ def main():
     for k,v in tile_map.items():
         tile_data[(v*32):(v+1)*32] = k
 
-    export.write_border_c_header(args.outfile, tiles_x, tiles_y, tile_data, tiles, palettes, palette_data)
+    export.write_border_c_header(args.outfile, tile_data, tiles, palettes, palette_data, rle=args.rle)
 
 
 if __name__ == "__main__":
