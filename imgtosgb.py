@@ -4,7 +4,6 @@ import png
 import numpy as np
 import export
 
-
 def convert_tile(data, palette, x, y):
     m = {}
     for i in range(len(palette)):
@@ -98,6 +97,7 @@ def main():
     parser.add_argument("infile", help="Image file.", type=str)
     parser.add_argument("outfile", help="Output file.", type=str)
     parser.add_argument("-r","--rle", help="Compress data and tile map using RLE.", action="store_true")
+
     args = parser.parse_args()
 
     source = png.Reader(args.infile)
@@ -115,17 +115,10 @@ def main():
 
     data, colors = consolidate_transparent(data, width, height, meta["palette"])
     palettes, palette_map = make_palettes(data, width, height, colors)
+    tile_data = []
     tile_data = [convert_tile(data, palette_map[palettes[tx+ty*tiles_x]], tx, ty) for ty in range(tiles_y) for tx in range(tiles_x)]
     tile_data_length = len(tile_data)
 
-    palette_data = []
-    for m in palette_map:
-        for i in range(16):
-            if i < len(m):
-                palette_data.append(palette_to_15bit(*colors[m[i]]))
-            else:
-                palette_data.append(palette_to_15bit(0, 0, 0, 0))
-    
     tile_map = dict()
     tiles = []
     for tile in tile_data:
@@ -136,6 +129,16 @@ def main():
     tile_data = np.zeros(32 * len(tile_map), np.uint8)
     for k,v in tile_map.items():
         tile_data[(v*32):(v+1)*32] = k
+
+    palette_data = []
+    for m in palette_map:
+        for i in range(16):
+            if i < len(m):
+                palette_data.append(palette_to_15bit(*colors[m[i]]))
+            else:
+                palette_data.append(palette_to_15bit(0, 0, 0, 0))
+
+    palettes = [(i+4) << 2 for i in palettes]
 
     export.write_border_c_header(args.outfile, tile_data, tiles, palettes, palette_data, rle=args.rle)
 

@@ -137,7 +137,7 @@ const unsigned int ${name}_palette_data[] = {
 };""").substitute(
         name=name,
         pdlen=palette_data_length,
-        palettes=pretty_data(palettes),
+        palettes=pretty_data(palettes, 20),
         palette_data=pretty_data(palette_data, 4),
         paloffset=palette_offset
     )
@@ -160,7 +160,7 @@ ${palette_data}
         name=name,
         length=tile_data_length,
         data=pretty_data(tile_data),
-        tiles=pretty_data(tiles),
+        tiles=pretty_data(tiles, 20),
         width=tiles_width,
         height=tiles_height,
         offset=tiles_offset,
@@ -198,7 +198,7 @@ const unsigned int ${name}_palette_data[] = {
     ${palette_data}
 };""").substitute(
         name=name,
-        palettes=pretty_data(palettes),
+        palettes=pretty_data(palettes, 20),
         palette_data=pretty_data(palette_data, 4)
     )
 
@@ -222,7 +222,7 @@ ${palette_c}\n""").substitute(
         name=name,
         hpath=hpath,
         data=pretty_data(tile_data),
-        tiles=pretty_data(tiles),
+        tiles=pretty_data(tiles, 20),
         palette_c=palette_c
     )
 
@@ -258,16 +258,23 @@ def write_border_c_header(path, tile_data, tiles, palettes, palette_data, rle=Fa
     tile_data_length = len(tile_data) // 32
     palette_count = len(palette_data) // 16
 
+    tile_data1 = tile_data[0:0x1000]
+    tile_data2 = tile_data[0x1000:0x2000]
+
     if rle:
-        tile_data = rle_compress(tile_data)
+        tile_data1 = rle_compress(tile_data1)
+        tile_data2 = rle_compress(tile_data2)
         tiles = rle_compress(tiles)
         palettes = rle_compress(palettes)
 
     s = Template("""#ifndef ${uname}_BORDER_H
 #define ${uname}_BORDER_H
 #define ${name}_data_length $datalength
-const unsigned char ${name}_data[] = {
-    ${data}
+const unsigned char ${name}_data1[] = {
+    ${data1}
+};
+const unsigned char ${name}_data2[] = {
+    ${data2}
 };
 const unsigned char ${name}_tiles[] = {
     ${tiles}
@@ -283,9 +290,10 @@ const unsigned int ${name}_palette_data[] = {
         uname=name.upper(),
         name=name,
         datalength=tile_data_length,
-        data=pretty_data(tile_data),
-        tiles=pretty_data(tiles),
-        palettes=pretty_data(palettes),
+        data1=pretty_data(tile_data1),
+        data2=pretty_data(tile_data2),
+        tiles=pretty_data(tiles, 32),
+        palettes=pretty_data(palettes, 32),
         palettecount=palette_count,
         palettedata=pretty_data(palette_data)
     )
