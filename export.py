@@ -7,9 +7,7 @@ def pretty_data(data, w=16):
     return ",\n    ".join([", ".join(map(lambda x: str(x).rjust(3), data[i:i+w])) for i in range(0, len(data), w)])
 
 
-def write_sprites_c_header(path, tile_data, palettes=None, palette_data=None, rle=False):
-    name = os.path.splitext(os.path.basename(path))[0]
-
+def gen_sprites_data(name, tile_data, palettes, palette_data, rle):
     has_palettes = palettes != None
 
     tile_data_length = int(len(tile_data) / 16)
@@ -22,95 +20,105 @@ def write_sprites_c_header(path, tile_data, palettes=None, palette_data=None, rl
         if has_palettes:
             palettes = rle_compress(palettes)
 
-    s_pal = ""
+    pal_defs = ""
+    pal_data = ""
+
     if has_palettes:
-        s_pal = Template("""const unsigned char ${name}_palettes[] = {
-    ${palettes}
-};
-#define ${name}_palette_data_length ${pdlen}
-const unsigned int ${name}_palette_data[] = {
+        pal_defs = Template("""#define ${name}_palette_data_length ${pdlen}""").substitute(
+            name=name,
+            pdlen=palette_data_length
+        )
+
+        pal_data = Template("""const unsigned int ${name}_palette_data[] = {
     ${palette_data}
-};""").substitute(name=name, pdlen=palette_data_length, palettes=pretty_data(palettes), palette_data=pretty_data(palette_data, 4))
+};
+const unsigned char ${name}_palettes[] = {
+    ${palettes}
+};""").substitute(
+            name=name,
+            palette_data=pretty_data(palette_data, 4),
+            palettes=pretty_data(palettes)
+        )
+
+    spr_defs = Template("""#define ${name}_data_length ${datalength}""").substitute(
+        name=name,
+        datalength=tile_data_length
+    )
+
+    spr_data = Template("""const unsigned char ${name}_data[] = {
+    ${data}
+};""").substitute(
+        name=name,
+        data=pretty_data(tile_data)
+    )
+
+    return spr_defs, spr_data, pal_defs, pal_data
+
+
+def write_sprites_c_header(path, tile_data, palettes=None, palette_data=None, rle=False):
+    name = os.path.splitext(os.path.basename(path))[0]
+
+    spr_defs, spr_data, pal_defs, pal_data = gen_sprites_data(name, tile_data, palettes, palette_data, rle)
 
     s = Template("""#ifndef ${uname}_SPRITES_H
 #define ${uname}_SPRITES_H
-#define ${name}_data_length $datalength
-const unsigned char ${name}_data[] = {
-    ${data}
-};
-${palette_data}
+${spr_defs}
+${spr_data}
+${pal_defs}
+${pal_data}
 #endif\n""").substitute(
         uname=name.upper(),
-        name=name,
-        datalength=tile_data_length,
-        data=pretty_data(tile_data),
-        palette_data=s_pal
+        spr_defs=spr_defs,
+        spr_data=spr_data,
+        pal_defs=pal_defs,
+        pal_data=pal_data
     )
 
     with open(path, "w") as f:
         f.write(s)
 
+
 def write_sprites_c_source(cpath, hpath, tile_data, palettes=None, palette_data=None, rle=False):
     name = os.path.splitext(os.path.basename(hpath))[0]
 
+    spr_defs, spr_data, pal_defs, pal_data = gen_sprites_data(name, tile_data, palettes, palette_data, rle)
+
     has_palettes = palettes != None
 
-    tile_data_length = int(len(tile_data) / 16)
-    palette_data_length = 0
+    s_externs = "extern const unsigned char ${name}_data[];"
+
     if has_palettes:
-        palette_data_length = int(len(palette_data) / 4)
+        s_externs += """extern const unsigned char ${name}_palettes[];
+extern const unsigned int ${name}_palette_data[];"""
 
-    if rle:
-        tile_data = rle_compress(tile_data)
-        if has_palettes:
-            palettes = rle_compress(palettes)
-
-    palette_c = ""
-    palette_h = ""
-    if has_palettes:
-        palette_c = Template("""const unsigned char ${name}_palettes[] = {
-    ${palettes}
-};
-const unsigned int ${name}_palette_data[] = {
-    ${palette_data}
-};""").substitute(name=name, palettes=pretty_data(palettes), palette_data=pretty_data(palette_data, 4))
-
-        palette_h = Template("""#define ${name}_palette_data_length ${pdlen}
-extern const unsigned char ${name}_palettes[];
-extern const unsigned int ${name}_palette_data[];""").substitute(name=name, pdlen=palette_data_length)
-
-    cdata = Template("""#include "${hpath}"
-const unsigned char ${name}_data[] = {
-    ${data}
-};
-${palette_c}""").substitute(
-        name=name,
-        hpath=hpath,
-        data=pretty_data(tile_data),
-        palette_c=palette_c
-   )
-
-    hdata = Template("""#ifndef ${uname}_SPRITES_H
+    s_header = Template("""#ifndef ${uname}_SPRITES_H
 #define ${uname}_SPRITES_H
-#define ${name}_data_length $datalength
-extern const unsigned char ${name}_data[];
-${palette_h}
-#endif\n""").substitute(
+${spr_defs}
+${pal_defs}
+${externs}
+#endif""").substitute(
         uname=name.upper(),
-        name=name,
-        datalength=tile_data_length,
-        palette_h=palette_h
+        spr_defs=spr_defs,
+        pal_defs=pal_defs,
+        externs=Template(s_externs).substitute(name=name)
+    )
+
+    s_source = Template("""#include "${hpath}"
+${spr_data}
+${pal_data}""").substitute(
+        hpath=hpath,
+        spr_data=spr_data,
+        pal_data=pal_data
     )
 
     with open(cpath, "w") as f:
-        f.write(cdata)
+        f.write(s_source)
 
     with open(hpath, "w") as f:
-        f.write(hdata)
+        f.write(s_header)
 
 
-def write_map_c_header(path, tile_data, tiles, tiles_width, tiles_height, tiles_offset, palettes=None, palette_data=None, palette_offset=None, rle_data=False, rle_tiles=False):
-    name = os.path.splitext(os.path.basename(path))[0]
+def gen_map_data(name, tile_data, tiles, tiles_width, tiles_height, tiles_offset, palettes=None, palette_data=None, palette_offset=None, rle_data=False, rle_tiles=False):
     has_palettes = palettes != None
 
     tile_data_length = int(len(tile_data) / 16)
@@ -125,46 +133,71 @@ def write_map_c_header(path, tile_data, tiles, tiles_width, tiles_height, tiles_
         if has_palettes:
             palettes = rle_compress(palettes)
 
-    s_pal = ""
+    pal_defs = ""
+    pal_data = ""
+
     if has_palettes:
-        s_pal = Template("""const unsigned char ${name}_palettes[] = {
+        pal_defs = Template("""#define ${name}_palette_data_length ${pdlen}
+#define ${name}_palette_offset ${paloffset}""").substitute(
+            name=name,
+            pdlen=palette_data_length,
+            paloffset=palette_offset
+        )
+
+        pal_data = Template("""const unsigned char ${name}_palettes[] = {
     ${palettes}
 };
-#define ${name}_palette_data_length ${pdlen}
-#define ${name}_palette_offset ${paloffset}
+
 const unsigned int ${name}_palette_data[] = {
     ${palette_data}
 };""").substitute(
+            name=name,
+            palettes=pretty_data(palettes, 20),
+            palette_data=pretty_data(palette_data, 4)
+        )
+
+    map_defs = Template("""#define ${name}_data_length $length
+#define ${name}_tiles_width ${width}
+#define ${name}_tiles_height ${height}
+#define ${name}_tiles_offset ${offset}""").substitute(
         name=name,
-        pdlen=palette_data_length,
-        palettes=pretty_data(palettes, 20),
-        palette_data=pretty_data(palette_data, 4),
-        paloffset=palette_offset
+        length=tile_data_length,
+        width=tiles_width,
+        height=tiles_height,
+        offset=tiles_offset
     )
+
+    map_data = Template("""const unsigned char ${name}_data[] = {
+    ${data}
+};
+
+const unsigned char ${name}_tiles[] = {
+    ${tiles}
+};""").substitute(
+        name=name,
+        data=pretty_data(tile_data),
+        tiles=pretty_data(tiles, 20)
+    )
+
+    return map_defs, map_data, pal_defs, pal_data
+
+def write_map_c_header(path, tile_data, tiles, tiles_width, tiles_height, tiles_offset, palettes=None, palette_data=None, palette_offset=None, rle_data=False, rle_tiles=False):
+    name = os.path.splitext(os.path.basename(path))[0]
+
+    map_defs, map_data, pal_defs, pal_data = gen_map_data(name, tile_data, tiles, tiles_width, tiles_height, tiles_offset, palettes, palette_data, palette_offset, rle_data, rle_tiles)
 
     s = Template("""#ifndef ${uname}_MAP_H
 #define ${uname}_MAP_H
-#define ${name}_data_length $length
-const unsigned char ${name}_data[] = {
-    ${data}
-};
-#define ${name}_tiles_width ${width}
-#define ${name}_tiles_height ${height}
-#define ${name}_tiles_offset ${offset}
-const unsigned char ${name}_tiles[] = {
-    ${tiles}
-};
-${palette_data}
+${map_defs}
+${map_data}
+${pal_defs}
+${pal_data}
 #endif\n""").substitute(
         uname=name.upper(),
-        name=name,
-        length=tile_data_length,
-        data=pretty_data(tile_data),
-        tiles=pretty_data(tiles, 20),
-        width=tiles_width,
-        height=tiles_height,
-        offset=tiles_offset,
-        palette_data=s_pal
+        map_defs=map_defs,
+        map_data=map_data,
+        pal_defs=pal_defs,
+        pal_data=pal_data
     )
 
     with open(path, "w") as f:
@@ -173,83 +206,43 @@ ${palette_data}
 
 def write_map_c_source(cpath, hpath, tile_data, tiles, tiles_width, tiles_height, tiles_offset, palettes=None, palette_data=None, palette_offset=None, rle_data=False, rle_tiles=False):
     name = os.path.splitext(os.path.basename(hpath))[0]
-
     has_palettes = palettes != None
 
-    tile_data_length = int(len(tile_data) / 16)
-    palette_data_length = 0
-    if has_palettes:
-        palette_data_length = int(len(palette_data) / 4)
+    map_defs, map_data, pal_defs, pal_data = gen_map_data(name, tile_data, tiles, tiles_width, tiles_height, tiles_offset, palettes, palette_data, palette_offset, rle_data, rle_tiles)
 
-    if rle_data:
-        tile_data = rle_compress(tile_data)
-    if rle_tiles:
-        tiles = rle_compress(tiles)
-        if has_palettes:
-            palettes = rle_compress(palettes)
-
-    palette_c = ""
-    palette_h = ""
-    if has_palettes:
-        palette_c = Template("""const unsigned char ${name}_palettes[] = {
-    ${palettes}
-};
-const unsigned int ${name}_palette_data[] = {
-    ${palette_data}
-};""").substitute(
-        name=name,
-        palettes=pretty_data(palettes, 20),
-        palette_data=pretty_data(palette_data, 4)
-    )
-
-        palette_h = Template("""#define ${name}_palette_data_length ${pdlen}
-#define ${name}_palette_offset ${paloffset}
-extern const unsigned char ${name}_palettes[];
-extern const unsigned int ${name}_palette_data[];""").substitute(
-        name=name,
-        pdlen=palette_data_length,
-        paloffset=palette_offset
-    )
-
-    cdata = Template("""#include "${hpath}"
-const unsigned char ${name}_data[] = {
-    ${data}
-};
-const unsigned char ${name}_tiles[] = {
-    ${tiles}
-};
-${palette_c}\n""").substitute(
-        name=name,
-        hpath=hpath,
-        data=pretty_data(tile_data),
-        tiles=pretty_data(tiles, 20),
-        palette_c=palette_c
-    )
-
-    hdata = Template("""#ifndef ${uname}_MAP_H
-#define ${uname}_MAP_H
-#define ${name}_data_length $length
+    s_externs = """
 extern const unsigned char ${name}_data[];
-#define ${name}_tiles_width ${width}
-#define ${name}_tiles_height ${height}
-#define ${name}_tiles_offset ${offset}
-extern const unsigned char ${name}_tiles[];
-${palette_h}
+extern const unsigned char ${name}_tiles[];"""
+
+    if has_palettes:
+        s_externs += """extern const unsigned char ${name}_palettes[];
+extern const unsigned int ${name}_palette_data[];"""
+
+    s_header = Template("""#ifndef ${uname}_MAP_H
+#define ${uname}_MAP_H
+${map_defs}
+${pal_defs}
+${externs}
 #endif\n""").substitute(
         uname=name.upper(),
-        name=name,
-        length=tile_data_length,
-        width=tiles_width,
-        height=tiles_height,
-        offset=tiles_offset,
-        palette_h=palette_h
+        map_defs=map_defs,
+        pal_defs=pal_defs,
+        externs=Template(s_externs).substitute(name=name)
+    )
+
+    s_source = Template("""#include "${hpath}"
+${map_data}
+${pal_data}\n""").substitute(
+        hpath=hpath,
+        map_data=map_data,
+        pal_data=pal_data
     )
 
     with open(cpath, "w") as f:
-        f.write(cdata)
+        f.write(s_source)
 
     with open(hpath, "w") as f:
-        f.write(hdata)
+        f.write(s_header)
 
 
 def write_border_c_header(path, tile_data, tiles, palettes, palette_data, rle=False):
