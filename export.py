@@ -66,7 +66,8 @@ ${spr_defs}
 ${spr_data}
 ${pal_defs}
 ${pal_data}
-#endif\n""").substitute(
+#endif
+""").substitute(
         uname=name.upper(),
         spr_defs=spr_defs,
         spr_data=spr_data,
@@ -88,15 +89,16 @@ def write_sprites_c_source(cpath, hpath, tile_data, palettes=None, palette_data=
     s_externs = "extern const unsigned char ${name}_data[];"
 
     if has_palettes:
-        s_externs += """extern const unsigned char ${name}_palettes[];
-extern const unsigned int ${name}_palette_data[];"""
+        s_externs += "extern const unsigned char ${name}_palettes[];\n"
+        s_externs += "extern const unsigned int ${name}_palette_data[];\n"
 
     s_header = Template("""#ifndef ${uname}_SPRITES_H
 #define ${uname}_SPRITES_H
 ${spr_defs}
 ${pal_defs}
 ${externs}
-#endif""").substitute(
+#endif
+""").substitute(
         uname=name.upper(),
         spr_defs=spr_defs,
         pal_defs=pal_defs,
@@ -105,7 +107,8 @@ ${externs}
 
     s_source = Template("""#include "${hpath}"
 ${spr_data}
-${pal_data}""").substitute(
+${pal_data}
+""").substitute(
         hpath=hpath,
         spr_data=spr_data,
         pal_data=pal_data
@@ -192,7 +195,8 @@ ${map_defs}
 ${map_data}
 ${pal_defs}
 ${pal_data}
-#endif\n""").substitute(
+#endif
+""").substitute(
         uname=name.upper(),
         map_defs=map_defs,
         map_data=map_data,
@@ -210,20 +214,19 @@ def write_map_c_source(cpath, hpath, tile_data, tiles, tiles_width, tiles_height
 
     map_defs, map_data, pal_defs, pal_data = gen_map_data(name, tile_data, tiles, tiles_width, tiles_height, tiles_offset, palettes, palette_data, palette_offset, rle_data, rle_tiles)
 
-    s_externs = """
-extern const unsigned char ${name}_data[];
-extern const unsigned char ${name}_tiles[];"""
+    s_externs = "extern const unsigned char ${name}_data[];\nextern const unsigned char ${name}_tiles[];\n"
 
     if has_palettes:
-        s_externs += """extern const unsigned char ${name}_palettes[];
-extern const unsigned int ${name}_palette_data[];"""
+        s_externs += "extern const unsigned char ${name}_palettes[];\n"
+        s_externs += "extern const unsigned int ${name}_palette_data[];\n"
 
     s_header = Template("""#ifndef ${uname}_MAP_H
 #define ${uname}_MAP_H
 ${map_defs}
 ${pal_defs}
 ${externs}
-#endif\n""").substitute(
+#endif
+""").substitute(
         uname=name.upper(),
         map_defs=map_defs,
         pal_defs=pal_defs,
@@ -232,7 +235,8 @@ ${externs}
 
     s_source = Template("""#include "${hpath}"
 ${map_data}
-${pal_data}\n""").substitute(
+${pal_data}
+""").substitute(
         hpath=hpath,
         map_data=map_data,
         pal_data=pal_data
@@ -279,7 +283,8 @@ const unsigned char ${name}_palettes[] = {
 const unsigned int ${name}_palette_data[] = {
     ${palettedata}
 };
-#endif\n""").substitute(
+#endif
+""").substitute(
         uname=name.upper(),
         name=name,
         datalength=tile_data_length,
