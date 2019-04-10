@@ -1,4 +1,5 @@
 import os
+import math
 from string import Template
 from rle import compress as rle_compress
 
@@ -24,7 +25,7 @@ def gen_sprites_data(name, tile_data, palettes, palette_data, rle):
     pal_data = ""
 
     if has_palettes:
-        pal_defs = Template("""#define ${name}_palette_data_length ${pdlen}""").substitute(
+        pal_defs = Template("""#define ${name}_palette_data_length ${pdlen}U""").substitute(
             name=name,
             pdlen=palette_data_length
         )
@@ -40,7 +41,7 @@ const unsigned char ${name}_palettes[] = {
             palettes=pretty_data(palettes)
         )
 
-    spr_defs = Template("""#define ${name}_data_length ${datalength}""").substitute(
+    spr_defs = Template("""#define ${name}_data_length ${datalength}U""").substitute(
         name=name,
         datalength=tile_data_length
     )
@@ -121,16 +122,22 @@ ${pal_data}
         f.write(s_header)
 
 
-def gen_map_data(name, tile_data, tiles, tiles_width, tiles_height, tiles_offset, palettes=None, palette_data=None, palette_offset=None, rle_data=False, rle_tiles=False):
+def gen_map_data(name, tile_data, tiles, tiles_width, tiles_height, tiles_offset, split_data=1, palettes=None, palette_data=None, palette_offset=None, rle_data=False, rle_tiles=False):
     has_palettes = palettes != None
 
-    tile_data_length = int(len(tile_data) / 16)
     palette_data_length = 0
     if has_palettes:
         palette_data_length = int(len(palette_data) / 4)
 
+    # split tile data
+    part_size = math.ceil(len(tile_data) / 16 / split_data) * 16
+
+    tile_data = [tile_data[(i*part_size) : ((i+1)*part_size)] for i in range(split_data)]
+    tile_data_length = [int(len(d) / 16) for d in tile_data]
+
     if rle_data:
-        tile_data = rle_compress(tile_data)
+        tile_data = [rle_compress(d) for d in tile_data]
+
     if rle_tiles:
         tiles = rle_compress(tiles)
         if has_palettes:
@@ -140,8 +147,8 @@ def gen_map_data(name, tile_data, tiles, tiles_width, tiles_height, tiles_offset
     pal_data = ""
 
     if has_palettes:
-        pal_defs = Template("""#define ${name}_palette_data_length ${pdlen}
-#define ${name}_palette_offset ${paloffset}""").substitute(
+        pal_defs = Template("""#define ${name}_palette_data_length ${pdlen}U
+#define ${name}_palette_offset ${paloffset}U""").substitute(
             name=name,
             pdlen=palette_data_length,
             paloffset=palette_offset
@@ -159,10 +166,14 @@ const unsigned int ${name}_palette_data[] = {
             palette_data=pretty_data(palette_data, 4)
         )
 
-    map_defs = Template("""#define ${name}_data_length $length
-#define ${name}_tiles_width ${width}
-#define ${name}_tiles_height ${height}
-#define ${name}_tiles_offset ${offset}""").substitute(
+    map_defs = ""
+    for i in range(split_data):
+        id = "" if i == 0 else str(i+1)
+        map_defs += "#define {0}_data_length{1} {2}U\n".format(name, id, tile_data_length[i])
+
+    map_defs += Template("""#define ${name}_tiles_width ${width}U
+#define ${name}_tiles_height ${height}U
+#define ${name}_tiles_offset ${offset}U""").substitute(
         name=name,
         length=tile_data_length,
         width=tiles_width,
@@ -170,24 +181,19 @@ const unsigned int ${name}_palette_data[] = {
         offset=tiles_offset
     )
 
-    map_data = Template("""const unsigned char ${name}_data[] = {
-    ${data}
-};
+    map_data = ""
+    for i in range(split_data):
+        id = "" if i == 0 else str(i+1)
+        map_data += """const unsigned char {0}_data{1}[] = {{\n\t{2}\n}};\n""".format(name, id, pretty_data(tile_data[i]))
 
-const unsigned char ${name}_tiles[] = {
-    ${tiles}
-};""").substitute(
-        name=name,
-        data=pretty_data(tile_data),
-        tiles=pretty_data(tiles, 20)
-    )
+    map_data += "const unsigned char {0}_tiles[] = {{\n\t{1}\n}};".format(name, pretty_data(tiles, 20))
 
     return map_defs, map_data, pal_defs, pal_data
 
-def write_map_c_header(path, tile_data, tiles, tiles_width, tiles_height, tiles_offset, palettes=None, palette_data=None, palette_offset=None, rle_data=False, rle_tiles=False):
+def write_map_c_header(path, tile_data, tiles, tiles_width, tiles_height, tiles_offset, split_data=1, palettes=None, palette_data=None, palette_offset=None, rle_data=False, rle_tiles=False):
     name = os.path.splitext(os.path.basename(path))[0]
 
-    map_defs, map_data, pal_defs, pal_data = gen_map_data(name, tile_data, tiles, tiles_width, tiles_height, tiles_offset, palettes, palette_data, palette_offset, rle_data, rle_tiles)
+    map_defs, map_data, pal_defs, pal_data = gen_map_data(name, tile_data, tiles, tiles_width, tiles_height, tiles_offset, split_data, palettes, palette_data, palette_offset, rle_data, rle_tiles)
 
     s = Template("""#ifndef ${uname}_MAP_H
 #define ${uname}_MAP_H
@@ -208,13 +214,16 @@ ${pal_data}
         f.write(s)
 
 
-def write_map_c_source(cpath, hpath, tile_data, tiles, tiles_width, tiles_height, tiles_offset, palettes=None, palette_data=None, palette_offset=None, rle_data=False, rle_tiles=False):
+def write_map_c_source(cpath, hpath, tile_data, tiles, tiles_width, tiles_height, tiles_offset, split_data=1, palettes=None, palette_data=None, palette_offset=None, rle_data=False, rle_tiles=False):
     name = os.path.splitext(os.path.basename(hpath))[0]
     has_palettes = palettes != None
 
-    map_defs, map_data, pal_defs, pal_data = gen_map_data(name, tile_data, tiles, tiles_width, tiles_height, tiles_offset, palettes, palette_data, palette_offset, rle_data, rle_tiles)
+    map_defs, map_data, pal_defs, pal_data = gen_map_data(name, tile_data, tiles, tiles_width, tiles_height, tiles_offset, split_data, palettes, palette_data, palette_offset, rle_data, rle_tiles)
 
-    s_externs = "extern const unsigned char ${name}_data[];\nextern const unsigned char ${name}_tiles[];\n"
+    s_externs = "extern const unsigned char ${name}_tiles[];\n"
+    for i in range(split_data):
+        id = "" if i == 0 else str(i+1)
+        s_externs += "extern const unsigned char ${{name}}_data{0}[];\n".format(id)
 
     if has_palettes:
         s_externs += "extern const unsigned char ${name}_palettes[];\n"
@@ -266,7 +275,7 @@ def write_border_c_header(path, tile_data, tiles, palettes, palette_data, rle=Fa
 
     s = Template("""#ifndef ${uname}_BORDER_H
 #define ${uname}_BORDER_H
-#define ${name}_data_length $datalength
+#define ${name}_data_length ${datalength}U
 const unsigned char ${name}_data1[] = {
     ${data1}
 };
@@ -279,7 +288,7 @@ const unsigned char ${name}_tiles[] = {
 const unsigned char ${name}_palettes[] = {
     ${palettes}
 };
-#define ${name}_num_palettes $palettecount
+#define ${name}_num_palettes ${palettecount}U
 const unsigned int ${name}_palette_data[] = {
     ${palettedata}
 };

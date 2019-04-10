@@ -105,6 +105,7 @@ def read_palette_image(path, colors):
 
     return colors, palette_map
 
+
 def rgb_to_5bit(r, g, b):
     r = round(r  / 255 * 31)
     g = round(g  / 255 * 31)
@@ -172,6 +173,7 @@ def main():
     parser.add_argument("-O", "--offset", help="Tile map offset.", type=int, default=0)
     parser.add_argument("-P", "--palette_offset", help="Palette index offset.", type=int, default=0)
     parser.add_argument("-I", "--include_palette", help="Force inclusion of palettes from image.", type=str)
+    parser.add_argument("-s", "--split_data", help="Split tile data into multiple parts.", type=int, default=1)
     args = parser.parse_args()
 
     source = png.Reader(args.infile)
@@ -183,6 +185,10 @@ def main():
         raise ValueError("PNG image is not indexed.")
     if not args.color and len(meta["palette"]) > 4:
         raise ValueError("At most 4 colors are supported in non-color mode.")
+    if args.split_data < 1:
+        raise ValueError("Tile data split should be 1 or more parts.")
+    if args.split_data > 1 and not args.map:
+        raise ValueError("Tile data split not implemented for sprite output yet.")
 
     data = np.array(list(data_map)).transpose()
     colors = meta["palette"]
@@ -248,9 +254,16 @@ def main():
         tiles = [i + args.offset for i in tiles]
 
         if args.cfile:
-            export.write_map_c_source(args.cfile, args.outfile, tile_data, tiles, tiles_x, tiles_y, args.offset, palettes, palette_data, args.palette_offset, rle_data=args.rle or args.rle_data, rle_tiles=args.rle)
+            export.write_map_c_source(
+                args.cfile, args.outfile,
+                tile_data, tiles, tiles_x, tiles_y, args.offset, args.split_data,
+                palettes, palette_data, args.palette_offset,
+                rle_data=args.rle or args.rle_data, rle_tiles=args.rle)
         else:
-            export.write_map_c_header(args.outfile, tile_data, tiles, tiles_x, tiles_y, args.offset, palettes, palette_data, args.palette_offset, rle_data=args.rle or args.rle_data, rle_tiles=args.rle)
+            export.write_map_c_header(
+                args.outfile, tile_data, tiles, tiles_x, tiles_y, args.offset, args.split_data,
+                palettes, palette_data, args.palette_offset,
+                rle_data=args.rle or args.rle_data, rle_tiles=args.rle)
 
     else:
         tile_data = np.fromiter(itertools.chain.from_iterable(tile_data), np.uint8)
