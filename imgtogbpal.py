@@ -31,7 +31,7 @@ def main():
     out = [rgb_to_5bit(*palette[data[x,y]]) for y in range(height) for x in range(4)]
 
     if args.correct_lcd:
-        lcd_map = lcs.build_lcd_map()
+        lcd_map = lcd.build_lcd_map()
         out = [lcd.find_best(c, lcd_map) for c in out]
 
     datatype = "int"
