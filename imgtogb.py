@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
+import math
 import argparse
 import png
 import numpy as np
 import itertools
 import export
+import lcd
+from colors import rgb_to_5bit
 from string import Template
 
 
@@ -106,13 +109,6 @@ def read_palette_image(path, colors):
     return colors, palette_map
 
 
-def rgb_to_5bit(r, g, b):
-    r = round(r  / 255 * 31)
-    g = round(g  / 255 * 31)
-    b = round(b  / 255 * 31)
-    return r + (g << 5) + (b << 10)
-
-
 def make_dx_palettes(data, data_dx, colors, tiles_x, tiles_y):
     palette_map = []
     palettes = []
@@ -174,6 +170,7 @@ def main():
     parser.add_argument("-P", "--palette_offset", help="Palette index offset.", type=int, default=0)
     parser.add_argument("-I", "--include_palette", help="Force inclusion of palettes from image.", type=str)
     parser.add_argument("-s", "--split_data", help="Split tile data into multiple parts.", type=int, default=1)
+    parser.add_argument("-l", "--correct_lcd", help="Correct colors for GBC LCD.", action="store_true")
     args = parser.parse_args()
 
     source = png.Reader(args.infile)
@@ -238,6 +235,10 @@ def main():
 
     if palettes != None:
         palettes = [i + args.palette_offset for i in palettes]
+
+        if args.correct_lcd:
+            lcd_map = lcd.build_lcd_map()
+            palette_data = [lcd.find_best(c, lcd_map) for c in palette_data]
 
     if args.map:
         tile_map = dict()
