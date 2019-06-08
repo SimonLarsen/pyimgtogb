@@ -170,6 +170,7 @@ def main():
     parser.add_argument("-P", "--palette_offset", help="Palette index offset.", type=int, default=0)
     parser.add_argument("-I", "--include_palette", help="Force inclusion of palettes from image.", type=str)
     parser.add_argument("-s", "--split_data", help="Split tile data into multiple parts.", type=int, default=1)
+    parser.add_argument("-S", "--split_tiles", help="Split tile map into multiple parts.", type=int, default=1)
     parser.add_argument("-l", "--correct_lcd", help="Correct colors for GBC LCD.", action="store_true")
     args = parser.parse_args()
 
@@ -183,9 +184,11 @@ def main():
     if not args.color and len(meta["palette"]) > 4:
         raise ValueError("At most 4 colors are supported in non-color mode.")
     if args.split_data < 1:
-        raise ValueError("Tile data split should be 1 or more parts.")
+        raise ValueError("Tile data split must be 1 or more parts.")
     if args.split_data > 1 and not args.map:
         raise ValueError("Tile data split not implemented for sprite output yet.")
+    if args.split_tiles < 1:
+        raise ValueError("Tile map split must be 1 or more parts.")
 
     data = np.array(list(data_map)).transpose()
     colors = meta["palette"]
@@ -257,12 +260,14 @@ def main():
         if args.cfile:
             export.write_map_c_source(
                 args.cfile, args.outfile,
-                tile_data, tiles, tiles_x, tiles_y, args.offset, args.split_data,
+                tile_data, tiles, tiles_x, tiles_y, args.offset,
+                args.split_data, args.split_tiles,
                 palettes, palette_data, args.palette_offset,
                 rle_data=args.rle or args.rle_data, rle_tiles=args.rle)
         else:
             export.write_map_c_header(
-                args.outfile, tile_data, tiles, tiles_x, tiles_y, args.offset, args.split_data,
+                args.outfile, tile_data, tiles, tiles_x, tiles_y, args.offset,
+                args.split_data, args.split_tiles,
                 palettes, palette_data, args.palette_offset,
                 rle_data=args.rle or args.rle_data, rle_tiles=args.rle)
 

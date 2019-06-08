@@ -6,6 +6,7 @@ import numpy as np
 from string import Template
 from colors import rgb_to_5bit
 from export import pretty_data
+import lcd
 
 
 def main():

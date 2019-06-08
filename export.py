@@ -8,6 +8,11 @@ def pretty_data(data, w=16):
     return ",\n    ".join([", ".join(map(lambda x: str(x).rjust(3), data[i:i+w])) for i in range(0, len(data), w)])
 
 
+def split_data_parts(data, parts, chunk_size=16):
+    part_size = math.ceil(len(data) / chunk_size / parts) * chunk_size
+    return [data[(i*part_size) : ((i+1)*part_size)] for i in range(parts)]
+
+
 def gen_sprites_data(name, tile_data, palettes, palette_data, rle):
     has_palettes = palettes != None
 
@@ -122,26 +127,28 @@ ${pal_data}
         f.write(s_header)
 
 
-def gen_map_data(name, tile_data, tiles, tiles_width, tiles_height, tiles_offset, split_data=1, palettes=None, palette_data=None, palette_offset=None, rle_data=False, rle_tiles=False):
+def gen_map_data(name, tile_data, tiles, tiles_width, tiles_height, tiles_offset, split_data=1, split_tiles=1, palettes=None, palette_data=None, palette_offset=None, rle_data=False, rle_tiles=False):
     has_palettes = palettes != None
 
+    # split tile data
+    tile_data = split_data_parts(tile_data, split_data, 16)
+    tile_data_length = [int(len(d) / 16) for d in tile_data]
+
+    tiles = split_data_parts(tiles, split_tiles, 1)
+    tiles_height = math.floor(tiles_height / split_tiles)
+    
     palette_data_length = 0
     if has_palettes:
+        palettes = split_data_parts(palettes, split_tiles, 1)
         palette_data_length = int(len(palette_data) / 4)
-
-    # split tile data
-    part_size = math.ceil(len(tile_data) / 16 / split_data) * 16
-
-    tile_data = [tile_data[(i*part_size) : ((i+1)*part_size)] for i in range(split_data)]
-    tile_data_length = [int(len(d) / 16) for d in tile_data]
 
     if rle_data:
         tile_data = [rle_compress(d) for d in tile_data]
 
     if rle_tiles:
-        tiles = rle_compress(tiles)
+        tiles = [rle_compress(d) for d in tiles]
         if has_palettes:
-            palettes = rle_compress(palettes)
+            palettes = [rle_compress(d) for d in palettes]
 
     pal_defs = ""
     pal_data = ""
@@ -154,17 +161,12 @@ def gen_map_data(name, tile_data, tiles, tiles_width, tiles_height, tiles_offset
             paloffset=palette_offset
         )
 
-        pal_data = Template("""const unsigned char ${name}_palettes[] = {
-    ${palettes}
-};
+        pal_data = """const unsigned int {0}_palette_data[] = {{\n\t{1}\n}};\n""".format(name, pretty_data(palette_data, 4))
 
-const unsigned int ${name}_palette_data[] = {
-    ${palette_data}
-};""").substitute(
-            name=name,
-            palettes=pretty_data(palettes, 20),
-            palette_data=pretty_data(palette_data, 4)
-        )
+        for i in range(split_tiles):
+            id = "" if i == 0 else str(i+1)
+            pal_data += """const unsigned char {0}_palettes{1}[] = {{\n\t{2}\n}};\n""".format(name, id, pretty_data(palettes[i], 20))
+
 
     map_defs = ""
     for i in range(split_data):
@@ -186,14 +188,16 @@ const unsigned int ${name}_palette_data[] = {
         id = "" if i == 0 else str(i+1)
         map_data += """const unsigned char {0}_data{1}[] = {{\n\t{2}\n}};\n""".format(name, id, pretty_data(tile_data[i]))
 
-    map_data += "const unsigned char {0}_tiles[] = {{\n\t{1}\n}};".format(name, pretty_data(tiles, 20))
+    for i in range(split_tiles):
+        id = "" if i == 0 else str(i+1)
+        map_data += """const unsigned char {0}_tiles{1}[] = {{\n\t{2}\n}};\n""".format(name, id, pretty_data(tiles[i], 20))
 
     return map_defs, map_data, pal_defs, pal_data
 
-def write_map_c_header(path, tile_data, tiles, tiles_width, tiles_height, tiles_offset, split_data=1, palettes=None, palette_data=None, palette_offset=None, rle_data=False, rle_tiles=False):
+def write_map_c_header(path, tile_data, tiles, tiles_width, tiles_height, tiles_offset, split_data=1, split_tiles=1, palettes=None, palette_data=None, palette_offset=None, rle_data=False, rle_tiles=False):
     name = os.path.splitext(os.path.basename(path))[0]
 
-    map_defs, map_data, pal_defs, pal_data = gen_map_data(name, tile_data, tiles, tiles_width, tiles_height, tiles_offset, split_data, palettes, palette_data, palette_offset, rle_data, rle_tiles)
+    map_defs, map_data, pal_defs, pal_data = gen_map_data(name, tile_data, tiles, tiles_width, tiles_height, tiles_offset, split_data, split_tiles, palettes, palette_data, palette_offset, rle_data, rle_tiles)
 
     s = Template("""#ifndef ${uname}_MAP_H
 #define ${uname}_MAP_H
@@ -214,19 +218,24 @@ ${pal_data}
         f.write(s)
 
 
-def write_map_c_source(cpath, hpath, tile_data, tiles, tiles_width, tiles_height, tiles_offset, split_data=1, palettes=None, palette_data=None, palette_offset=None, rle_data=False, rle_tiles=False):
+def write_map_c_source(cpath, hpath, tile_data, tiles, tiles_width, tiles_height, tiles_offset, split_data=1, split_tiles=1, palettes=None, palette_data=None, palette_offset=None, rle_data=False, rle_tiles=False):
     name = os.path.splitext(os.path.basename(hpath))[0]
     has_palettes = palettes != None
 
-    map_defs, map_data, pal_defs, pal_data = gen_map_data(name, tile_data, tiles, tiles_width, tiles_height, tiles_offset, split_data, palettes, palette_data, palette_offset, rle_data, rle_tiles)
+    map_defs, map_data, pal_defs, pal_data = gen_map_data(name, tile_data, tiles, tiles_width, tiles_height, tiles_offset, split_data, split_tiles, palettes, palette_data, palette_offset, rle_data, rle_tiles)
 
-    s_externs = "extern const unsigned char ${name}_tiles[];\n"
+    s_externs = ""
     for i in range(split_data):
         id = "" if i == 0 else str(i+1)
         s_externs += "extern const unsigned char ${{name}}_data{0}[];\n".format(id)
 
+    for i in range(split_tiles):
+        id = "" if i == 0 else str(i+1)
+        s_externs += "extern const unsigned char ${{name}}_tiles{0}[];\n".format(id)
+        if has_palettes:
+            s_externs += "extern const unsigned char ${{name}}_palettes{0}[];\n".format(id)
+
     if has_palettes:
-        s_externs += "extern const unsigned char ${name}_palettes[];\n"
         s_externs += "extern const unsigned int ${name}_palette_data[];\n"
 
     s_header = Template("""#ifndef ${uname}_MAP_H
