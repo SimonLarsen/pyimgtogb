@@ -165,7 +165,8 @@ def main():
     parser.add_argument("-m", "--map", help="Produce tile map.", action="store_true")
     parser.add_argument("--s8x16", help="Enable 8x16 sprite mode.", action="store_true")
     parser.add_argument("-r", "--rle", help="Compress data and tile map using RLE.", action="store_true")
-    parser.add_argument("-R", "--rle_data", help="Compress only data using RLE.", action="store_true")
+    parser.add_argument("-R", "--rle_data", help="Compress data using RLE.", action="store_true")
+    parser.add_argument("-T", "--rle_tiles", help="Compress tile map using RLE.", action="store_true")
     parser.add_argument("-O", "--offset", help="Tile map offset.", type=int, default=0)
     parser.add_argument("-P", "--palette_offset", help="Palette index offset.", type=int, default=0)
     parser.add_argument("-I", "--include_palette", help="Force inclusion of palettes from image.", type=str)
@@ -263,20 +264,22 @@ def main():
                 tile_data, tiles, tiles_x, tiles_y, args.offset,
                 args.split_data, args.split_tiles,
                 palettes, palette_data, args.palette_offset,
-                rle_data=args.rle or args.rle_data, rle_tiles=args.rle)
+                rle_data=args.rle or args.rle_data,
+                rle_tiles=args.rle or args.rle_tiles)
         else:
             export.write_map_c_header(
                 args.outfile, tile_data, tiles, tiles_x, tiles_y, args.offset,
                 args.split_data, args.split_tiles,
                 palettes, palette_data, args.palette_offset,
-                rle_data=args.rle or args.rle_data, rle_tiles=args.rle)
+                rle_data=args.rle or args.rle_data,
+                rle_tiles=args.rle or args.rle_tiles)
 
     else:
         tile_data = np.fromiter(itertools.chain.from_iterable(tile_data), np.uint8)
         if args.cfile:
-            export.write_sprites_c_source(args.cfile, args.outfile, tile_data, palettes, palette_data, rle=args.rle)
+            export.write_sprites_c_source(args.cfile, args.outfile, tile_data, palettes, palette_data, rle=args.rle or args.rle_data)
         else:
-            export.write_sprites_c_header(args.outfile, tile_data, palettes, palette_data, rle=args.rle)
+            export.write_sprites_c_header(args.outfile, tile_data, palettes, palette_data, rle=args.rle or args.rle_data)
 
 if __name__ == "__main__":
     main()
